@@ -18,7 +18,7 @@ from OpenGL import GLU
 from sklearn.utils import shuffle
 import time
 
-import tensorflow.contrib.slim as slim
+import models
 
 
 def main():
@@ -47,20 +47,15 @@ def main():
     # for debug purpose
     # TODO: ask Alex about selu at output?
     env = gym.make(args.env)
+    obs_shape = list(env.observation_space.shape)
+    act_shape = list(env.action_space.shape)
     print(env.action_space.low, env.action_space.high)
 
-    obs_ph = tf.placeholder(tf.float32, shape = [None] + list(X.shape[1:]), name = 'obs_ph')
-    act_ph = tf.placeholder(tf.float32, shape = [None] + list(Y.shape[1:]), name = 'act_ph')
-    hid = slim.fully_connected(obs_ph, 32, activation_fn=tf.nn.relu)
-    hid = slim.fully_connected(hid, 32, activation_fn=tf.nn.relu)
-    # dummy
-    hid = slim.fully_connected(hid, Y.shape[1], activation_fn=None)
-    act_out = tf.identity(hid, name = 'act_out')
-    
-    loss = tf.losses.mean_squared_error(act_out, act_ph)
+    obs_ph = tf.placeholder(tf.float32, shape = [None] + obs_shape, name = 'obs_ph')
+    act_ph = tf.placeholder(tf.float32, shape = [None] + act_shape, name = 'act_ph')
+    net = models.SimpleNet()
+    act_out, loss, train_step = net.CreateGraph(obs_ph, act_ph)
     tf.summary.scalar('losses/total_loss', loss)
-    optimizer = tf.train.AdamOptimizer(learning_rate=1e-4)
-    train_step = optimizer.minimize(loss)
     
     batch_size = 100
     batch_index = 0
@@ -72,7 +67,6 @@ def main():
         # [os.remove(f) for f in glob.glob(os.path.join(tf_board, '*'))]
         writer = tf.summary.FileWriter(os.path.join(tf_board, str(int(time.time()))))
         writer.add_graph(sess.graph)
-        tf.summary.scalar('loss', loss)
         merged_summary = tf.summary.merge_all()
 
         for i in range(args.epochs):
