@@ -3,10 +3,10 @@
 """
 Code to load an expert policy and generate roll-out data for behavioral cloning.
 Example usage:
-    python train_dagger.py RoboschoolHumanoid-v1 --num_rollouts 20 --max_steps 10000 --num_experts 1 --epochs_per_rollout 5 --max_batches 10000
+    python train_dagger.py RoboschoolAnt-v1 --num_rollouts 20 --num_experts 1 --epochs_per_rollout 5 --max_batches 10000
 """
 
-
+import time
 import argparse
 import pickle
 import os, glob
@@ -38,6 +38,8 @@ def main():
                         help='Max number of batches to train')
     args = parser.parse_args()
 
+    print('training DAgger...')
+
     # set up
     env = gym.make(args.env)
     obs_shape = list(env.observation_space.shape)
@@ -66,9 +68,9 @@ def main():
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        tf_board = os.path.join('/tmp/gube', args.env + '_basic')
-        [os.remove(f) for f in glob.glob(os.path.join(tf_board, '*'))]
-        writer = tf.summary.FileWriter(tf_board)
+        tf_board = os.path.join('/tmp/gube/dagger', args.env)
+        # [os.remove(f) for f in glob.glob(os.path.join(tf_board, '*'))]
+        writer = tf.summary.FileWriter(os.path.join(tf_board, str(int(time.time()))))
         writer.add_graph(sess.graph)
         tf.summary.scalar('loss', loss)
         merged_summary = tf.summary.merge_all()
@@ -99,7 +101,7 @@ def main():
                     break
             returns.append(totalr)
 
-            for i in range(args.epochs_per_rollout):
+            for j in range(args.epochs_per_rollout):
                 x, y = shuffle(X, Y)
                 offset = 0
                 while offset + batch_size <= len(x):
@@ -115,7 +117,7 @@ def main():
                         break
                 
             s = sess.run(merged_summary, feed_dict = {obs_ph: x, act_ph: y})
-            writer.add_summary(s, i)
+            writer.add_summary(s, batch_index)
             if batch_index >= args.max_batches:
                 break
 

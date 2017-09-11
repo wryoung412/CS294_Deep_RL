@@ -19,7 +19,7 @@ class BasePolicy(ABC):
             saver.restore(self.sess, tf.train.latest_checkpoint(model_dir))
 
     @abstractmethod
-    def type():
+    def type(self):
         pass
 
     def act(self, ob):

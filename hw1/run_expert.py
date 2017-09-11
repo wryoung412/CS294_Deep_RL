@@ -3,8 +3,7 @@
 """
 Code to load an expert policy and generate roll-out data for behavioral cloning.
 Example usage:
-    python run_expert.py experts/RoboschoolHumanoid-v1.py --render \
-            --num_rollouts 20
+    python run_expert.py experts/RoboschoolHumanoid-v1.py --render --num_rollouts 20
 """
 
 import argparse
@@ -13,6 +12,7 @@ import tensorflow as tf
 import numpy as np
 import gym
 import importlib
+from OpenGL import GLU
 
 def main():
     parser = argparse.ArgumentParser()

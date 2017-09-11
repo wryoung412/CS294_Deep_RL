@@ -3,7 +3,7 @@
 """
 Code to load an expert policy and generate roll-out data for behavioral cloning.
 Example usage:
-    python train_imitation.py RoboschoolHumanoid-v1 --num_rollouts 20 --epochs 20
+    python train_imitation.py RoboschoolAnt-v1 --num_rollouts 20 --epochs 100 --max_batches 10000
 """
 
 
@@ -16,6 +16,7 @@ import gym, roboschool
 import importlib
 from OpenGL import GLU
 from sklearn.utils import shuffle
+import time
 
 import tensorflow.contrib.slim as slim
 
@@ -27,7 +28,11 @@ def main():
                         help='Number of expert roll outs')
     parser.add_argument('--epochs', type=int, default=20,
                         help='Number of epochs to train')
+    parser.add_argument('--max_batches', type=int, default=10000,
+                        help='Max number of batches to train')
     args = parser.parse_args()
+
+    print('training immitation...')
 
     data_path = os.path.join('data', args.env)
     file_name = 'train_{}.p'.format(args.num_rollouts)
@@ -37,13 +42,12 @@ def main():
     X = expert_data['observations']
     Y = expert_data['actions']
     assert len(Y.shape) == 2
+    print('number of training data:', len(X))
 
     # for debug purpose
     # TODO: ask Alex about selu at output?
     env = gym.make(args.env)
     print(env.action_space.low, env.action_space.high)
-    print(type(expert_data['observations']))
-    print(expert_data['observations'].shape)
 
     obs_ph = tf.placeholder(tf.float32, shape = [None] + list(X.shape[1:]), name = 'obs_ph')
     act_ph = tf.placeholder(tf.float32, shape = [None] + list(Y.shape[1:]), name = 'act_ph')
@@ -59,12 +63,14 @@ def main():
     train_step = optimizer.minimize(loss)
     
     batch_size = 100
+    batch_index = 0
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        tf_board = os.path.join('/tmp/gube', args.env + '_basic')
-        [os.remove(f) for f in glob.glob(os.path.join(tf_board, '*'))]
-        writer = tf.summary.FileWriter(tf_board)
+        tf_board = os.path.join('/tmp/gube/imitation', args.env)
+        # [print(f) for f in glob.glob(os.path.join(tf_board, '*'))]
+        # [os.remove(f) for f in glob.glob(os.path.join(tf_board, '*'))]
+        writer = tf.summary.FileWriter(os.path.join(tf_board, str(int(time.time()))))
         writer.add_graph(sess.graph)
         tf.summary.scalar('loss', loss)
         merged_summary = tf.summary.merge_all()
@@ -81,10 +87,16 @@ def main():
                              act_ph: y[start:end]
                          })
                 offset = end
-                
+                batch_index += 1
+                if batch_index >= args.max_batches:
+                    break
+
             s = sess.run(merged_summary, feed_dict = {obs_ph: x, act_ph: y})
-            writer.add_summary(s, i)
-            
+            writer.add_summary(s, batch_index)
+            print('Batch {}'.format(batch_index))
+            if batch_index >= args.max_batches:
+                break
+
         saver = tf.train.Saver()
         saver.save(sess, os.path.join('policy/imitation', args.env, args.env))
 

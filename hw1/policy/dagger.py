@@ -9,5 +9,5 @@ def get_policy(env_name):
     return DaggerPolicy(env_name)
 
 class DaggerPolicy(BasePolicy):
-    def type():
+    def type(self):
         return 'dagger'

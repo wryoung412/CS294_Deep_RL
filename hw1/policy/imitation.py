@@ -9,5 +9,5 @@ def get_policy(env_name):
     return ImitationPolicy(env_name)
 
 class ImitationPolicy(BasePolicy):
-    def type():
+    def type(self):
         return 'imitation'

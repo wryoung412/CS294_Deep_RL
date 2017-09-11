@@ -11,3 +11,9 @@ In `experts/`, the provided expert policies are:
 * RoboschoolHumanoid-v1.py
 * RoboschoolReacher-v1.py
 * RoboschoolWalker2d-v1.py
+
+# Things to watch
+## DAgger vs Imitation
+For 20 rollouts and 10000 batches of 100 samples, DAgger is better than imitation on Ant.
+
+## Humanoid requires a larger NN than Ant
