@@ -1,0 +1,1069 @@
+\documentclass[onecolumn, 12pt]{IEEEtran}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{mathrsfs}
+\usepackage{subfig}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{amssymb}
+\linespread{1.2}\selectfont
+\usepackage{amsthm}
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  urlcolor=blue
+}
+
+% \newtheorem{thm}{Theorem}[section]
+% \newtheorem{lem}{Lemma}[section]
+% \newtheorem{prop}{Proposition}[section]
+% \newtheorem{corollary}{Corollary}[section]
+% \newtheorem{definition}{Definition}[section]
+
+\newcommand\E[1]{\mathbb{E}\left[#1\right]}
+\newcommand\p[1]{\mathbb{P}\left(#1\right)}
+\newcommand\Var[1]{\mathrm{Var}\left[#1\right]}
+\newcommand\Cov[1]{\mathbb{Cov}\left[#1\right]}
+\newcommand\Tr[1]{\mathrm{Tr}\left[#1\right]}
+\newcommand\1[1]{\mathbb{I}_{\left\{#1\right\}}}
+\newcommand\sign[1]{\mathrm{sign}(#1)}
+\newcommand\cond[3]{#1_{#2|#3}}
+\newcommand\N[2]{\mathcal{N}\left(#1, #2\right)}
+
+\newtheorem{lemma}{Lemma}\newtheorem{theorem}{Theorem}\newtheorem{corollary}{Corollary}\newtheorem{remark}{Remark}\newtheorem{conjecture}{Conjecture}
+\newtheorem{definition}{Definition}\newtheorem{proposition}{Proposition}
+\newtheorem{example}{Example}
+
+\begin{document}
+
+\title{Reinforcement Learning}
+\author{Rui Wu}
+\maketitle
+
+\section{Monte Carlo method and TD learning}
+
+This section considers several methods for learning the optimal policy. We only consider episode environments.
+
+Let $Q(s, a)$ be the state-action value function and $\pi(a|s)$ be the $\epsilon$-greedy policy derived from $Q(s, a)$. According to the policy improvement theorem, we start from an initial policy and keep improving it towards the optimal policy by iteratively estimating $Q(s, a)$ and updating $\pi(a|s)$. For each episode, we obtain the samples as
+\begin{align*}
+  s_0, a_0, r_1, s_1, a_1, r_2, s_2, \dots, r_T, s_T (, a_T).
+\end{align*}
+Then we estimate the sample value for each $(s_t, a_t)$ and update $Q(s, a)$ with these sample values.
+
+\subsection{Batch Monte Carlo}
+Monte Carlo method estimates $G_t$ as
+\begin{align*}
+  G_t = r_{t+1} + \gamma r_{t + 2} + \dots + \gamma^{T-t - 1}r_T. 
+\end{align*}
+For batch update, we first compute the average reward for each state-action pair as
+\begin{align*}
+  G(s, a) = \frac{\sum_t{G_t\delta_{s, a}(s_t, a_t)}}{\sum_t{\delta_{s, a}(s_t, a_t)}},
+\end{align*}
+and then update $Q(s, a)$ as
+\begin{align*}
+  Q(s, a) \leftarrow Q(s, a) + \alpha(G(s, a) - Q(s, a)). 
+\end{align*}
+
+\subsection{Online Monte Carlo}
+Online Monte Carlo looks similar to TD learning and is easier to implement. It updates $Q(s, a)$ as
+\begin{align*}
+  Q(s_t, a_t) \leftarrow Q(s_t, a_t) + \alpha(G_t - Q(s_t, a_t)),
+\end{align*}
+where $G_t$ is defined as in batch Monte Carlo. Even though this method is called ``online'', it has to wait until an episode ends to actually compute the $G_t$'s.
+
+\subsection{Sarsa}
+It is similar to online Monte Carlo except that it computes $G_t$ as
+\begin{align*}
+  G_t = r_{t+1}+\gamma Q(s_{t+1}, a_{t+1}).
+\end{align*}
+
+\subsection{Q-learning}
+It is similar to online Monte Carlo except that it computes $G_t$ as
+\begin{align*}
+  G_t = r_{t+1}+\gamma \max_a Q(s_{t+1}, a).
+\end{align*}
+
+
+\section{Eligibility trace}
+
+This section focuses on appliying eligibility trace to $Q(s, a)$ than $V(s)$ and describes the $\text{Sarsa}(\lambda)$ algorithm in detail.
+
+\subsection{Forward view of $\text{Sarsa}(\lambda)$}
+
+We first generalizes the Sarsa reward $G_t$ to the $n$-step reward
+\begin{align*}
+  G_t^{(n)} = r_{t + 1} + \gamma r_{t + 2} + \dots + \gamma^{(n - 1)}r_{t +n} + \gamma^nQ(s_{t + n}, a_{t + n}), 
+\end{align*}
+and define
+\begin{align*}
+  G_t^\lambda = (1-\lambda)G_t^{(1)} + (1-\lambda)\lambda G_t^{(2)} + \dots + \lambda^{T - t} G_t^{(T - t)}. 
+\end{align*}
+If we assume an episode has infinite length and uss the assumption that the reward for a termination state remains the same, we can rewrite $G_t^\lambda$ as
+\begin{align*}
+  G_t^\lambda = (1 - \lambda) \sum_{n = 1}^\infty \lambda^{n - 1}G_t^{(n)}. 
+\end{align*}
+Then we update $Q(s, a)$ as
+\begin{align*}
+  Q(s, a) \leftarrow Q(s, a) + \alpha(G_t^\lambda - Q(s, a)). 
+\end{align*}
+
+This algorithm is between Monte Carlo and Sarsa. It incorporates a parameter $\lambda$ to balance how much into future we want to consider for reward estimation. However, to implement this forward view algorithm, we have to wait until an episode ends to start updating $Q(s, a)$, which is similar to online Monte Carlo.
+
+\subsection{Backward view of $\text{Sarsa}(\lambda)$}
+The backward view addresses the online update issue by introducing eligibility trace. The eligibility trace updates as
+\begin{align*}
+  Z(s, a) \leftarrow \lambda \gamma Z(s, a) + \delta_{s, a}(s_t, a_t),
+\end{align*}
+and the algorithm updates $Q(s, a)$ as
+\begin{align*}
+  Q(s, a) \leftarrow Q(s, a) + \alpha Z(s, a)(R_{t + 1} + \gamma Q(s_{t + 1}, a_{t + 1}) - Q(s_t, a_t)). 
+\end{align*}
+
+Note that this algorithm updates all states for each time $t$. This is very expensive compared to Sarsa or Monte Carlo. Is it really worth it?
+
+\subsection{Connection between forward and backward views}
+The forward and backward views are equivalent in an episode environments under first visit and batch update, i.e., $Q(s, a)$ is updated in batch after an episode ends. To illustrate this equivalency, we walk through the following example for policy evaluation.
+\begin{example}
+  Consider an episode as follows
+  \begin{align*}
+    s_1, a_1, r_2, s_2, a_2, r_3, s_1, a_3, r_4, s_4.
+  \end{align*}
+  Forward view. The estimated value for the first visit of state $s_1$ is
+  \begin{align*}
+    G^\lambda(s_1) =& (1 - \lambda) (r_2 + \gamma V(s_2)) \\
+    & (1-\lambda) \lambda (r_2 + \gamma r_3  + \gamma^2 V(s_1))\\
+    & \lambda^2(r_2 + \gamma r_3 + \gamma^2 r_4 + \gamma^3 V(s_4)).
+  \end{align*}
+  The value difference is
+  \begin{align*}
+    \Delta V_F(s_1) = G^\lambda(s_1) - V(s_1).
+  \end{align*}
+  Backward view. The eligibility trace for $s_1$ updates as
+  \begin{align*}
+    Z(s_1) = 1 \rightarrow \lambda\gamma \rightarrow 1 + \lambda^2\gamma^2.
+  \end{align*}
+  The value difference is
+  \begin{align*}
+    \Delta V_B(s_1) =& 1\cdot (r_2 + \gamma V(s_2) - V(s_1)) \\
+    & \lambda\gamma \cdot (r_3 + \gamma V(s_1) - V(s_2))\\
+    & (1 + \lambda^2\gamma^2)(r_3 + \gamma V(s_4) - V(s_1)).
+  \end{align*}
+  It is not difficult to show that $\Delta V_F(s_1) = \Delta V_B(s_1)$. However, this equality is not obvious from the first glance.
+\end{example}
+
+\subsection{Other eligibility trace algorithms}
+There is no $\text{MC}(\lambda)$ as Monte Carlo method does not do bootstrap. It is possible to do $Q(\lambda)$ but it seems more involved. 
+
+
+\section{Policy gradient and imitation learning}
+
+
+\subsection{Policy gradient}
+
+
+
+\subsection{Imitation learning}
+
+\subsection{Policy gradient as imitation learning}
+
+\subsection{DAgger}
+
+\end{document}
+
+\section{Level}
+
+What are the most urgent things to do? Huankai's diagram.
+
+What are the most impactful things to do?
+
+\section{What do we do}
+
+We provide a general purpose optimization framework as a service. Our
+customer is supposed to be user-facing and aims to optimze some metric with respect
+to the traffic. For each project, the customer specifies a set of
+actions to take and a target metric to optimize. In addition, the
+customer provide the data collected from the users. Then our framework
+learns a model from the historical data and makes real time decisions
+on the actions to take.
+
+\subsection{Discussion}
+
+We assume the customer is a web service provider and the users visit
+the service through browsers on various devices (PC, tablet, smart
+phone and so on).
+
+The data is a collection of user visit logs. In each visit, the user
+information and the action taken are recorded. There are several types
+of user information:
+\begin{enumerate}
+\item Basic information such as browser, device and ip address (including information that can be inferred from the ip address)
+\item User account information when log in is required
+\item Ads like information used in retargetting
+\item User behavior after the action
+\end{enumerate}
+The realized metric or reward is computed from the user behavior after the
+action. However, the metric is not necessarily associated with only
+one visit. For example, it could happen that the user took several
+visits and finally bought some product from the website. As another
+example, the metric representing the number of visits of a user in a
+week is defined over multiple visits.
+
+The model learning extracts the repeating pattern from the data. The
+first thought is to use visits as repeating units. However, as hinted
+above, each visit is too rigid with respect to the metric of interest
+thus might not be very informative. This fact opens a whole new
+dimension of freedom on dividing the data and we propose the notion of
+session as the repeating unit.
+
+A session can be an arbitrary collection of visits. Given the
+rationale of defining the session, we only consider metrics that are
+based on the visits within a session for now. (If the metric depends
+on multiple sessions, then we probably should redefine what a session
+is.) In practice, we also require the session to be easily
+deliminated. For simplicity, we assume only one metric is evaluated for a
+session.
+
+(However, with the definition of session, the notion of action becomes
+unclear, as a session normally contains multiple actions. It seems we
+should introduce the notion of super action that includes a series of
+actions. When makeing a decision for the current action, we should
+also look at the past actions we already took. What is fat
+tuple? Is fat tuple trying to solve this issue? Is it solved?
+
+To move on with the discussion, we assume each action is independent
+of past actions in the same session. For simple experiments like the
+SI web experiment, a session is simply a visit and the metric is
+also defined within a visit. )
+
+Now we can state the problem more formally. The data contains $N$
+sessions. For each session, an action $a$ is taken and a realized
+metric or reward $r$ is observed. In addition, we define a set of
+features based on the session capturing the context $ctx$. The
+definition of features can be quite flexible. Suppose there are
+multiple visits each with the information of the browser, we can
+either take empirical distribution of the browsers or just take the
+last one. The processed data looks like ${(a_i, r_i,
+  ctx_i)}_{i = 1}^N$. Then for a new context $ctx$, we need to decide
+what action $a$ to choose in order to maximize the reward $r$.
+
+(If past actions in the session matters, we also need to include some
+features for the past actions and the formulation becomes much
+more complicated. )
+
+TODO: Our model does not depend on the goal, but by introducing this
+dependency, one might be able to achieve better performance.
+
+
+
+
+
+
+
+
+
+
+The data consists of
+
+
+
+
+\subsection{Some thoughts}
+
+We currently assume the data are about human users thus our customer
+is likely to be a web service provider. Are there other scenarios our
+framework can be applied?
+
+Usually in live, we already have a notion of session, either created
+by the customer or defined by us by default. This should not restrict
+our exploration of the definition of a session. In fact, we can
+redefine session, i.e., data split, and train a new model from
+it. Note that the fact we used some definition of session to collect
+the data does not prevent us from reusing the data. This might help us
+identify better definition of session (whether a metric is optimizable
+or not also depends on the choice of session).
+
+In general, we assume projects are independent, i.e., when changing
+the actions or the target metric requires retraining the
+model. However, since we model all these variables with a joint
+distribution, so we have some capacity of reusing the existing model
+when the customer makes changes on the project.
+
+
+
+In each
+use this service, the customer creates a project, in which the
+customer specifies a metric
+
+Online training -> offline sanity check as in Bob fishing.
+
+\section{Distributions}
+
+\pagebreak
+
+\subsection{Discrete}
+
+\href{http://www.keithschwarz.com/darts-dice-coins/}{Alias method} for
+efficient sampling.
+
+It is still problematic as the distribution keeps changing. See
+\href{http://stackoverflow.com/questions/25189406/c-discrete-distribution-sampling-with-frequently-changing-probabilities}{here}. The
+paper \href{http://theory.stanford.edu/~matias/papers/MVN03.dynamic_rv_gen.pdf}{Dynamic Generation of Discrete Random Variates}
+is some literature.
+
+\subsection{Continuous}
+
+There are two types of parameterization for the normal-gamma
+distribution. According to \href{https://en.wikipedia.org/wiki/Normal-gamma_distribution}{Wikipedia} and the \href{https://www.cs.ubc.ca/~murphyk/Papers/bayesGauss.pdf}{note}, the first type of
+parameterization $NG(\mu, \lambda, \alpha, \beta)$ performs the
+posterior update as follows:
+\begin{align*}
+  \mu = & \frac{\lambda_0\mu_0 + \sum_ix_i}{\lambda_0 + n}\\
+  \lambda = & \lambda_0 + n\\
+  \alpha = & \alpha_0 + \frac{n}{2}\\
+  \beta = & \beta_0 + \frac{1}{2}\sum_i(x_i - \bar{x})^2 + \frac{\lambda_0 n (\bar{x} -
+            \mu_0)^2}{2(\lambda_0 + n)}.
+\end{align*}
+The second type of parameterization $NG(w_s, w_l, m_1, m_2)$ is much
+simpler to implement in practice and it performs
+the posterior update as follows:
+\begin{align*}
+  w_s = & w_{s0} + n\\
+  w_l = & w_{l0} + n\\
+  m = & m_0 + \sum x_i\\
+  s = & s_0 + \sum x_i^2.
+\end{align*}
+\begin{theorem}
+If $(\mu_0, \lambda_0, \alpha_0, \beta_0)$ and $(w_{s0}, w_{l0},
+m_0, s_0)$ satisfy the following consistency condition
+\begin{align*}
+  w_s = \lambda,\ w_l = 2\alpha,\ m = \lambda\mu,\ s
+  = 2\beta + \lambda\mu^2,
+\end{align*}
+or equivalently,
+\begin{align*}
+  \mu = \frac{m}{w_s},\ \lambda = w_s,\ \alpha =
+  \frac{w_l}{2},\ \beta = \frac{s}{2} - \frac{m^2}{2w_s},
+\end{align*}
+then the above two posterior updates are equivalent and the
+parameters always satisfy the consistency condition.
+
+\end{theorem}
+
+\begin{proof}
+Below we assume the first three conditions are satisfied and only
+verify the consistency of the $\beta$ update.
+\begin{align*}
+  \beta = & \beta_0 + \frac{1}{2}\sum x_i^2 - \frac{1}{2}n\bar{x}^2 +
+            \frac{\lambda_0 n}{2(\lambda_0 + n)}\left[\bar{x}^2 -
+            2\bar{x}\mu_0 + \mu_0^2\right]\\
+  = & \beta_0 + \frac{1}{2}(s - s_0) + \frac{1}{2(\lambda_0 + n)}\left[-n^2\bar{x}^2 -
+            2\lambda_0\mu_0n\bar{x} + \lambda_0n\mu_0^2\right]\\
+  = & \beta_0 + \frac{1}{2}(s - s_0) - \frac{1}{2w_s}(n\bar{x} +
+      \lambda_0\mu_0)^2 + \frac{1}{2(\lambda_0 +
+      n)}(\lambda_0^2\mu_0^2 + \lambda_0n\mu_0^2)\\
+  = & \frac{s}{2} - \frac{m_s^2}{2w_s} + \beta_0 - \frac{s_0}{2} +
+      \lambda_0\mu_0^2\\
+  = & \frac{s}{2} - \frac{m_s^2}{2w_s}.
+\end{align*}
+\end{proof}
+
+When we have $w_{s0} = \epsilon, w_{l0} = \epsilon, m_0 = 0, s_0 = 1$, we get $\mu_0
+= 0, \lambda_0 = \epsilon, \alpha_0 = \epsilon, \beta_0 = 1/2$. As $\lambda \approx 0$ he Gamma distribution
+concentrate around $0$, the normal distribution for the mean behaves
+like $N(0, \infty)$. The predictive distribution is
+$t_{2\epsilon}(x|0, \frac{1+\epsilon}{2\epsilon^2})$ where the second
+parameter is the variance not the precision (see (110) in
+\href{https://www.cs.ubc.ca/~murphyk/Papers/bayesGauss.pdf}{note}). It
+roughly means $\epsilon x$ is a t-distribution with degree of freedom
+$2\epsilon$.
+
+\pagebreak
+
+
+Here is the command to plot it in R.
+
+graphics.off(); x <- seq(-4, 4, length = 100); epsilon <- 0.001; plot(x / epsilon, dt(x, epsilon))
+
+
+
+
+\subsection{Fixed bins}
+
+The posterior update is suspicious. The outside samples are ignored
+somehow. Is this consistent?
+
+\subsection{Bin}
+
+
+Bin is based on an implementation of
+\href{https://github.com/tdunning/t-digest/blob/master/docs/t-digest-paper/histo.pdf}{TDigest}. The
+algorithm (Algorithm 1) is easy to follow. Not sure why this paper is not
+properly published and has no citation.
+
+Algorithm 2 is about computing the CDF. The way it defines the uniform
+distribution is very suspicious.
+
+Bins are interpretated as mixture of uniform distributions. The
+intervals of the uniform distributions are defined by
+HalfIntervals. Does the CDF respect this definition?
+
+The divergence between two bins are defined by ``align and
+compute''. Bins reserves some unseen weight as $\alpha$
+
+Quantized is not used much currently. Should look for bins instead.
+
+
+
+
+\subsection{SparseTuple}
+
+Tuple is the product of distributions. When sampling from a tuple,
+each dimension is sampled. SparseTuple in addition has a total weight $w$ and a
+weight for each dimension $w_d$. When sampling from a sparseTuple,
+dimension $d$ is sampled with probability $w_d / w$.
+
+\section{Distance}
+
+\subsection{Levy-Prokhorov metric}
+
+This metric is used to measure distance between distributions in
+probability theory. However is does not look very computable. The
+computation in one dimension is discussed
+\href{http://math.stackexchange.com/questions/224951/algorithms-for-computing-or-numerically-approximating-the-prokhorov-metric}{here}. On
+the other hand, for one dimensional continuous distributions,
+Kolmogorov¨CSmirnov test seems to be a similar metric. They seem to be equally
+hard to compute. For one dimensional Gaussians, there might be close
+form solution. For mixture distributions or mixture with PGM, sampling might be the only
+way to compute.
+
+It seems we can construct examples where importance sampling does not
+help.
+
+It is mentioned \href{https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test}{here} that ``In practice, the statistic requires a relatively large number of data points to properly reject the null hypothesis.''
+
+\subsection{KL divergence for mixture models}
+
+MixtureDivergenceVariationalBound ``APPROXIMATING THE KULLBACK LEIBLER DIVERGENCE
+BETWEEN GAUSSIAN MIXTURE MODELS''.
+
+
+
+Verify equation (20) in the paper. The optimal value of $L_f(f,
+\varphi)$ has a simple experession.
+
+What is used as the similarity between component $a$ and $b$? Why is
+it better than the Jensen-Shannon divergence?
+
+It somehow makes sense. Proportional to the component weight and
+$\exp(-D(f_a||g_b))$.
+
+In experiment, when the mixture model shows $D(f_a||f_b) \geq 0.5$,
+noticing that $D(f_a||f_a) = 0$, the iteration is able to drive the
+$\phi$ matrix as a diagonal one.
+\begin{remark}
+  Here is a rough argument of the above observation. Consider the
+  ideal case where $D(f_a||f_b)$ are small and the
+  mixture model has equal weights on all components. Start with
+  $\varphi$ an all-one matrix. First $\phi$ is
+  $\exp(D)$ with row norm. As the $i$-th row of $\exp(D)$ has the $i$-th term equal to
+  $1$ and all other terms are close to $0$. Thus the normalization
+  does not matter that much and $\phi ~ \exp(D)$. On the other hand $\varphi$
+  is $\phi$ with column normalization and we can argue similarly that
+  $\varphi ~ \exp(D)$. Then in the $n$-th iteration, $\phi ~ \exp(nD)$
+  and it will converge to the diagonal matrix.
+
+  In the case when the mixture weights are not exactly equal and the
+  off-diagonal terms of $D$ are not that small, the exponential
+  decaying iteration should only be affected up to some constant
+  factor and we expect the result still being diagonal.
+\end{remark}
+
+For mixture of Gaussian, the Jensen-Renyi divergence with $alpha = 2$ has a closed form
+solution.
+\href{https://www.cise.ufl.edu/~anand/pdf/jr-miccai09-final.pdf}{Closed-form Jensen-Renyi Divergence for
+Mixture of Gaussians \& Applications to
+Group-wise Shape Registration}.
+\begin{enumerate}
+\item Is this generalizable to other
+distributions? It seems (4) is trackable when Gaussian is replaced
+with a Tuple.
+\item Do we really need a divergence for mixture
+distributions? For the latter question, we could use this divergence
+to quantify the distance between the oracle mixture model and the
+learned mixture model.
+\end{enumerate}
+
+Oh, there is another closed-form expression for some divergence of
+Gaussian mixture model in ``Closed-Form Expression for Divergence of Gaussian Mixture Models''.
+
+
+
+
+
+\section{Posterior Update}
+
+\section{EM}
+There are several local optimums that we are thinking of. First, a
+component is dead. Second, two components that are the same and both
+captures some component. Third, two components that are similar and
+jointly captures some component.
+
+\section{Information bottleneck}
+
+The original paper for EM information bottleneck is
+\href{http://www.cse.huji.ac.il/~nir/Papers/Elidan05.pdf}{here}.
+
+There are two things I want to know. What are the followup works for
+it? How are people doing evaluation?
+
+ITM is partly derived from this. How does it fit into the big picture?
+
+
+\subsection{Rate distortion theory}
+The goal of rate distortion theory is understand how to compress a
+source $X$ with a desired distortion. As in the channel coding case,
+it is more efficient to consider the compression in the block coding
+sense for $n$ i.i.d. symbols $X^n$. The distortion function $d$ on
+multiple symbols is defined as
+\begin{align*}
+  d(X^n, \hat{X}^n) = \sum_i d(X_i, \hat{X}_i).
+\end{align*}
+The rate distortion problem is
+defined as, for a desired distortion level $D$, find the minimum rate
+$R$, such that there exists an encoding
+function
+\begin{align*}
+  f_n : X^n \to \{1, \dots, 2^{nR}\}
+\end{align*}
+and an decoding function
+\begin{align*}
+  g_n : \{1, \dots, 2^{nR}\}\to \hat{X}^n
+\end{align*}
+satisfying $Ed(X^n, g_n(f_n(X^n)))\leq D$. Thus we can define the rate
+distortion function as
+\begin{align*}
+\bar{R}(D) = \min_{p(\hat{x}^n|x^n):Ed(X^n, \hat{X}^n)\leq nD} I(X^n;
+  \hat{X}^n).
+\end{align*}
+The achievability of this definition is understood as
+follows. Consider a compression mapping $p(\hat{x}^n|x^n)$ which
+satisfies the distortion constraint. There are $2^{H(X^n)}$ typical
+sequences for $X^n$. The encoding function $f_n$ maps an
+$x^n$ to an $\hat{x}^n$ that is jointly typical with $x^n$ and the
+decoding function $g_n$ is simply identity. There are $2^{H(X^n,
+  \hat{X}^n)}$ jointly typical sequences and $2^{H(\hat{X}^n)}$
+typical sequences for $\hat{X^n}$, thus each $\hat{x^n}$ is
+jointly typical with $2^{H(X^n|\hat{X}^n)}$ typical sequences for
+$X^n$, therefore at least $2^{I(X^n;\hat{X}^n)}$ typical sequences for
+$\hat{X^n}$ is required to represent all the typical sequences for
+$X^n$.
+
+A remarkable result is to show that the above definition is equivalent
+to the single symbol definition
+\begin{align*}
+R(D) = \min_{p(\hat{x}|x):Ed(X, \hat{X})\leq D} I(X;
+  \hat{X}).
+\end{align*}
+\begin{theorem}
+  $\bar{R}(D) = nR(D)$.
+\end{theorem}
+\begin{proof}
+  By definition, $\bar{R}(D) \leq nR(D)$. Next we show that $\bar{R}(D) \geq nR(D)$. Following the proof of \cite[Theorem 10.2.1]{ElementsOfIT},
+  \begin{align*}
+    \bar{R}(D) \geq &\min_{\prod_ip(\hat{x}_i|x_i):Ed(X^n, \hat{X}^n)\leq nD} \sum_iI(X_i;
+  \hat{X}_i)\\
+    \geq & \min_{D^n: \sum_i D_i = nD}\sum_iR(D_i).
+  \end{align*}
+  As show in \cite[Lemma 10.4.1]{ElementsOfIT}, $R(D)$ is a convex
+  function thus
+  \begin{align*}
+    \sum_iR(D_i) \geq nR(\frac{1}{n}\sum_iD_i).
+  \end{align*}
+  Therefore $\bar{R}(D) \geq nR(D)$.
+\end{proof}
+
+\subsection{Motivation}
+
+To motivate the definition of information bottleneck, we rewrite the
+optimization of the rate distortion optimization as follows
+\begin{align*}
+\min_{p(\hat{x}|x)} I(X;
+  \hat{X}) + \lambda Ed(X, \hat{X}).
+\end{align*}
+Instead of minimizing the distortion, the information bottleneck
+approach aims to maximize the information $\hat{X}$ conveys about some
+other variable $Y$, therefore \cite{Tishby99} introduces
+the following optimization problem
+\begin{align*}
+\min_{p(\hat{x}|x)} I(X;
+  \hat{X}) - \lambda I(Y; \hat{X}).
+\end{align*}
+
+
+Multivariate information bottleneck
+
+Continuation and deterministic annealing -- this is quite relevant to
+our split trainer.
+
+\subsection{$P$ and $Q$ distribution}
+
+Let $X$ be the observed variables. We model $X$ using a family of mixture distributions $P_\theta$ with $C$ being the hidden component label. The goal is estimate the optimal $\theta$ from the samples $\{X^{(n)}\}_{n = 1}^N$,
+$$\theta^* = \arg\max_\theta \sum_{n = 1}^N \log P_\theta(X^{(n)}). $$
+
+Let $Q(x)$ be the empirical distribution of the samples, i.e.,
+$$ Q(X = x) = \frac{1}{N}\sum_{n = 1}^N \delta_{X^{(i)}}(x),$$
+where $\delta_x(\cdot)$ is the delta function for either a discrete or continuous alphabet. Let $P_\theta(X, C)$ be the model distribution. Then the EM algorithm estimates $\theta^*$ by solving the following optimization problem
+$$\max_{Q(c|x), \theta}\sum_xQ(x)\sum_cQ(c|x)\log\frac{P_\theta(x, c)}{Q(c|x)}, $$
+and it converges to a local optima that satisfies the fixed point conditions:
+$$ Q(c|x) = P_\theta(c|x), \quad \sum_{x, c}\frac{Q(x)}{P_\theta(x)}\frac{\partial}{\partial\theta}P_\theta(x, c) = 0. $$
+When $P_\theta(x)$ is allowed to be any distribution, then the second condition becomes $P_\theta(x) = Q(x)$. In general, when some variable is continuous, as $Q(x)$ is a spiky distribution and $P_\theta(x)$ is usually assumed to be continuous, they are not always equal. However, we expect the second condition to imply $P_\theta(x)$ is close to $Q(x)$ in the \href{https://en.wikipedia.org/wiki/L%C3%A9vy%E2%80%93Prokhorov_metric}{Prokhorov metric}. Therefore we can roughly use $P$ and $Q$ interchangeably in our derivation.
+
+
+\subsection{How to solve it}
+
+\subsection{Density exponent}
+
+IB with $\beta$ optimizes
+\begin{align*}
+  \max_Q -I(X;C) + \sum_i \beta_i I(X_i;C),
+\end{align*}
+which is equivalent to
+\begin{align*}
+  \max_Q H(X|C) - \sum_i\beta_iH(X_i|C).
+\end{align*}
+Below we discuss the effect of $\beta$. The claim is that, for
+relevant context variables, $\beta$ must be nonzero in order to learn anything
+useful.
+
+Consider an example with two variables $(Y, R)$ which are dependent. If we set $\beta_R = 1$ and $\beta_Y =
+0$, IB becomes
+\begin{align*}
+\max_Q H(Y|R, C).
+\end{align*}
+It is easy to see that $C = f(R) \in \mathbb{N}$ for any deterministic function $f$
+is a global optima to the above optimization problem, thus a global
+optima to IB. The EM algorithm could randomly terminate on any such
+global optima. In particular, $C \equiv 1$ or single component is a
+global optima.
+
+\subsection{Entropy estimation}
+
+
+
+\href{https://arxiv.org/pdf/cond-mat/0305641.pdf}{This} proposed a
+method for estimating the mutual information of continuous
+variables. It is based previous works for entropy estimation
+[19]. Note that equation (4) is another method for entropy estimation
+using spacing. However, it only works for one dimensional distribution
+and does not generalize to higher dimensions.
+
+The basic idea in [19] as reviewed in Section II.A is as
+follows. Assume $X\in \mathbb{R}^D$ and there are $N$ observations. As
+\begin{align*}
+  H(X) = -\frac{1}{N}\sum_i\log\mu(x_i),
+\end{align*}
+it is sufficient to come up with an estimator of $\log\mu(x_i)$ for
+any $i$. For a given distance function $||\cdot||$, let $d_{i, k}$ be the distance between $x_i$ and its $k$-th
+nearest neighbor. Then we approximate $\mu(x_i)$ by assuming
+$\mu(x)$ is constant within $B(x_i, d_{i, k}) = \{||x - x_i||<d_{i, k}\}$ and get
+\begin{align*}
+  \mu(x_i)\approx & \frac{\int_{B(x_i, d_{i,
+                    k})}\mu(x)dx}{\int_{B(x_i, d_{i, k})}dx}\\
+  = &\frac{\int_{B(x_i, d_{i,
+                    k})}\mu(x)dx}{C_D(2d_{i, k})^D}.
+\end{align*}
+By definition of $\mu(x)$, the numerator is approximately $k/N$. Thus
+\begin{align*}
+  \log \mu(x_i)\approx \ln(k) - \ln(N) - \ln(C_D) - D\ln(2d_{i, k}).
+\end{align*}
+A better approximation for the numerator is considered in the paper,
+which could be more precise on the boundary of $B(x_i, d_{i, k})$. It shows that
+\begin{align*}
+  \log \mu(x_i)\approx \psi(k) - \psi(N) - \ln(C_D) - D\ln(2d_{i, k}),
+\end{align*}
+where $\psi$ is the digamma function. We note that $\psi(z)$ and
+$\ln(z)$ are very close when $z$ is a positive real number. In fact,
+as $x \to \infty$, $\psi(x)$ gets arbitrarily close to both
+$\ln(x-1/2)$ and $\ln(x)$
+\href{https://en.wikipedia.org/wiki/Digamma_function}{here}.
+
+Now we have the tool to understand why binning performs poorly. The
+key question is about how we estimate $$ I_i =
+\ln\frac{p(y_i|x_i)}{p(y_i)}. $$ To avoid bias induced by different
+resolutions in the numerator and the denominator, the general method
+is to pick a common neighborhood $B_i$ and estimate $I_i$ within
+$B_i$. Clearly $B_i$ cannot be too big as large window size blurs the
+joint distribution and seems to push $\hat{I}_i$ towards $0$. On the
+other hand, $B_i$ cannot be too small either
+and should contain sufficient number of samples to accurately estimate
+$I_i$. In particular, if
+$B_i$ only contains $y_i$ itself, we get $\hat{I}_i =
+\ln\frac{N}{N_i}$ which losses all local information about the density
+and causes a bias. The KNN method picks $B_i = B(y_i, d_{i, k})$ which
+strikes a very nice balance. While by definition $B_i$ is contrained
+to a local neighborhood, it also ensures that $p(y_i|x_i)$ has $k$
+samples and $p(y_i)$ has at least $k$ samples. We should note that, as
+KNN suffers from curse of dimension, we do not expect this method to
+work well for high dimensional distributions. There are two types of
+binning: fixed bins or adaptive bins. Fixed binning method
+picks $B_i$ based on some grid. Without using the local
+information, these bins are likely to be either too big or too small
+for each sample, thus the overall estimation is unreliable. Adaptive
+binning picks $B_i$ that equally splits the density. The number of
+samples within a bin are usually the same and larger than one, so the
+method will be fine, though there is some bias in approximating the
+density (see \href{http://c4dm.eecs.qmul.ac.uk/papers/2009/StowellPlumbley09entropy.pdf}{here}).
+
+\begin{remark}
+  It is not hard to implement the algorithm in
+  \href{http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0087357#s5}{here}. However,
+  it is easy to get the base of the logarithm wrong. The digamma
+  function implicitly uses the natural logarithm which should also be
+  used in numerical evaluation of the mutual information. I have
+  noticed that there seems to be a factor bias of $2/3$ (not a random bias). Potentially I could
+  figure it out in either of the following two ways, but I guess I have already made
+  the right decision to move on.
+  \begin{enumerate}
+    \item Read the Matlab implementation. Luckily this paper has
+      attached its implementation.
+    \item Identify that the factor bias is in fact a single number. Reverse engineer the factor bias. It is still hard to
+      realize the factor is $\ln(2)$ though.
+    \end{enumerate}
+
+\end{remark}
+
+\href{http://jimbeck.caltech.edu/summerlectures/references/Entropy%20estimation.pdf}{This}
+is a classical paper about entropy estimation.
+
+
+\href{https://en.wikipedia.org/wiki/Differential_entropy}{Here} is
+some discussion about differential entropy. Differential entropy is in
+general not invariant under arbitrary invertible maps. The continuous mutual
+information is usually more desirable than the differential entropy. A
+modification of differential entropy that addresses these drawbacks is
+the relative information entropy
+
+\href{https://en.wikipedia.org/wiki/Limiting_density_of_discrete_points}{Here}
+and
+\href{https://books.google.com/books?id=tTN4HuUNXjgC&pg=PA375&lpg=PA375&dq=limiting+density+of+discrete+points&source=bl&ots=H5PusxHAS6&sig=ItDnzEQod_UffAWcvbPCC2eteTQ&hl=en&sa=X&ved=0ahUKEwjCoLbzhabPAhVP42MKHbX0DwIQ6AEIOzAF#v=onepage&q=limiting%20density%20of%20discrete%20points&f=false}{here}
+is an alternative definition for continuous variables and a not so
+useful discussion
+about can be found
+\href{http://lo-tho.blogspot.com/2013/01/the-wikipedia-article-for.html}{here}.
+
+\href{http://papers.nips.cc/paper/1408-new-approximations-of-differential-entropy-for-independent-component-analysis-and-projection-pursuit.pdf}{This}
+is a highly cited paper about differential entropy estimation. It
+talks about how to approximate the maximum entropy density with finite
+samples. Not very useful here.
+
+\pagebreak
+
+\section{Modeling missing values}
+
+This section discusses how we handle missing values. We first
+rigorously defines the probability triple and then show how we learn a
+model from the samples. In this section, we use the term model and
+probability interchangeably.
+
+\subsection{Sample space}
+Consider a random vector $X = (X_1, \dots, X_D)$ where $X_i\in
+\mathcal{X}_i$. When $X_i$ is missing, it is denoted as $X_i =
+\epsilon_i$. Then the space for random vectors with missing values is
+defined as
+\begin{align*}
+  \bar{\Omega} = \prod_i\bar{\mathcal{X}}_i, \ \text{where}\
+  \bar{\mathcal{X}}_i = \mathcal{X}_i\cup \{\epsilon_i\}.
+\end{align*}
+We call $\bar{\Omega}$ the instance space since each $\bar{x}\in
+\bar{\Omega}$ is an instance in our implementation.
+
+We can describe missing values from another perspective. For each $i$,
+let $\phi_i\in\{0, 1\}$ be the random variable indicating whether
+$X_i$ is missing, i.e., $\phi_i = 1$ if $X_i$ is missing. Introducing the new
+variable $\phi_i$ decouples the value of $X_i$ and whether it is
+missing, and gives us more flexibility in specifying the distribution
+of a model. We thus define the model space as
+\begin{align*}
+  \Omega = \prod_i (\mathcal{X}_i\times \{0, 1\})
+\end{align*}
+and each element in $\Omega$ is denoted by $(x, \phi)$.
+
+The model space $\Omega$ is larger than the instance space
+$\bar{\Omega}$. In particular, we can define the equivalence
+relationship $\sim$ such that two elements $(x^1, \phi^1) \sim (x^2,
+\phi^2)$ if and only if $\phi^1 = \phi^2$ and $x_i^1 = x_i^2$ for any
+$i$ such that $\phi_i^1 = 0$. It is easy to see that there is a
+bijection between the quotient space $\Omega / \sim$ and
+$\bar{\Omega}$. We define the quotient map $\tau: \Omega \to
+\bar{\Omega}$ as
+\begin{align*}
+  \tau((x, \phi)) = \bar{x}, \ \text{where}\ \bar{x}|_{\phi = 0} =
+  x|_{\phi = 0},\ \bar{x}|_{\phi = 1} = \epsilon|_{\phi = 1}.
+\end{align*}
+
+\subsection{Events}
+We define the set of events to be the greatest $\sigma$-algebra on
+both spaces, i.e., $\bar{\mathcal{F}} = 2^{\bar{\Omega}}$ and
+$\mathcal{F} = 2^\Omega$.
+There is a family of events on $\Omega$ that is of particular
+interest. It is the set of instances,
+\begin{align*}
+  \mathcal{A} = \{A_{\bar{x}}\}_{\bar{x}\in\bar{\Omega}}, \
+  \text{where}\ A_{\bar{x}} = \tau^{-1}(\bar{x}).
+\end{align*}
+
+\subsection{Probability}
+Let $P$ denote a probability on $(\Omega, \mathcal{F})$. The
+induced probability $\bar{P}$ of $P$ on $(\bar{\Omega}, \bar{\mathcal{F}})$
+is defined as
+\begin{align*}
+  \bar{P}(\bar{x}) = P(\tau^{-1}(\bar{x})), \ \forall \bar{x}\in\bar{\Omega}.
+\end{align*}
+In fact, all probabilities on $(\bar{\Omega}, \bar{\mathcal{F}})$ can
+be defined this way.
+
+We consider two families of probabilities on $(\Omega,
+\mathcal{F})$. The first family assumes $X$ and $\Phi$ are
+independent,
+\begin{align*}
+  P(x, \phi) = P(x)P(\phi),
+\end{align*}
+thus $P(x)$ and $P(\phi)$ can be specified separately. For example,
+$P(x)$ could be defined by some probabilistic graphical model while
+$P(\phi) = \prod_iP(\phi_i)$ is a set of independent Bernoulli random
+variables.
+
+The second family assumes $X$ and $\Phi$ are independent given some
+hidden variable $C\in [K]$. In this case, $P$ is defined on the
+enlarged product space $\Omega \times [K]$,
+\begin{align*}
+  P(x, \phi, c) = P(c)P(x|c)P(\phi|c)
+\end{align*}
+and $P(x, \phi)$ is obtained by marginalizing over $C$. The sparse
+tuple mixture model belongs to this family and has the form
+\begin{align*}
+  P(x, \phi, c) = P(c)\prod_iP(x_i|c)P(\phi_i|c).
+\end{align*}
+
+In general, $\bar{P}$ induced by $P$ only identifies the probability
+$(\Omega, \mathcal{A}, P)$. However, when there is more structure on
+$P$, it might be possible to uniquely identify $P$ from $\bar{P}$. The
+sparse tuple mixture model is one such example. For a give $P$,
+\begin{align*}
+  \bar{P}(\bar{x}, c) = P(c)\prod_i\bar{P}(\bar{x_i}|c)
+\end{align*}
+where $\bar{P}(x_i|c) = P(x_i|c)P(\phi_i = 0|c)$ for any $x_i\in
+\mathcal{X}_i$ and $\bar{P}(\epsilon_i|c) = P(\phi_i = 1|c)$. On the
+other hand, for a given $\bar{P}$,
+\begin{align*}
+  P(x, \phi, c) = \bar{P}(c)\prod_iP(x_i|c)P(\phi|c)
+\end{align*}
+where $P(x_i|c) = \frac{\bar{P}(x_i|c)}{1 - \bar{P}(\epsilon_i|c)}$
+for any $x_i\in\mathcal{X}_i$ and $P(\phi_i = 1|c) =
+\bar{P}(\epsilon_i)$.
+
+\subsection{Learning a sparse tuple mixture model from instances}
+
+The learning task is as follows: given a set of instances generated
+from a true model $(\Omega, \mathcal{F}, P^*)$, find a model in a
+given family of models that best approximates $P^*$.
+
+We first note that, without any restriction on the true model $P^*$, even
+when there is no constraint on the family of models we can use, it is
+not possible to recover $P^*$ with infinite number of
+instances. The reason is that the instances belong to the space
+$\bar{\Omega}$ and the part of $P^*$ that is not captured by
+$\bar{P}^*$ is not observable from the instances. Therefore we can
+only hope to approximate $(\Omega, \mathcal{F}, P^*)$ up to
+$(\bar{\Omega}, \bar{\mathcal{F}}, \bar{P}^*)$ or $(\Omega,
+\mathcal{A}, P^*)$. If there is a one to one map between $P^*$ and
+$\bar{P}^*$, such as when $P^*$ is a sparse tuple mixture model, then
+$P^*$ can be approximated from instances. However, we should not make
+this assumption in real applications where $P^*$ is unknown.
+
+The current family of models we use for learning is the sparse tuple
+mixture model. It is not difficult to write down the modified
+stochastic variational inference algorithm for such models (it is
+modified because the E-step is following the EM algorthm than the
+stochastic variational inference algorithm). In our current
+implementation, the E-step handles the missing values in a wrong way
+but the M-step is correct.
+
+Assume we use the sparse tuple mixture model for learning. For
+simplicity we represent the model in $\bar{\Omega}$ with a
+hyperparameter $\theta$. The goal is to estimate the optimal $\theta$
+from the instances $\{\bar{x}^{(n)}\}_{n = 1}^N$,
+\begin{align*}
+  \theta^* = \arg\max_\theta\sum_{n =
+  1}^N\log\bar{P}_\theta(\bar{x}^{(n)}).
+\end{align*}
+When it is clear from the context, we will omit $\theta$ in the
+notation and simply write $\bar{P}_\theta$ as $\bar{P}$. Let
+$Q(\bar{x})$ be the empirical probability of the instances, i.e.,
+\begin{align*}
+  Q(\bar{x}) = \frac{1}{N}\sum_n\delta_{\bar{x}^{(n)}}(\bar{x}),
+\end{align*}
+where $\delta$ is the dirac distribution for either discrete or
+continuous alphabet. Note that $Q\to \bar{P}^*$ when $N\to
+\infty$. The EM algorthm estimates $\theta^*$ by solving the following
+optimization problem with alternating maximization,
+\begin{align*}
+  \max_{Q(c|\bar{x}),
+  \theta}\sum_{\bar{x}}Q(\bar{x})\sum_cQ(c|\bar{x})\log\frac{\bar{P}_\theta(\bar{x},
+  c)}{Q(c|\bar{x})}.
+\end{align*}
+The algorithm converges to a local optima that satisfies the fixed
+point condition
+\begin{align*}
+  Q(c|\bar{x}) = \bar{P}_\theta(c|\bar{x}), \ \sum_{\bar{x}, c}\frac{Q(\bar{x})}{\bar{P}_\theta(\bar{x})}\frac{\partial}{\partial\theta}\bar{P}_\theta(\bar{x}, c) = 0.
+\end{align*}
+
+When $\bar{P}(\bar{x})$ is allowed to be any distribution, the second
+condition becomes $\bar{P}(\bar{x}) = Q(\bar{x})$. In general, when
+some variable is continuous, as $Q(\bar{x})$ is a spiky distribution
+while $\bar{P}_\theta(\bar{x})$ is usually from some smooth family,
+they are not always equal. If $P^*$ is close to the family of sparse
+tuple mixture model, we conjecture that the second condition implies
+that $\bar{P}_\theta(\bar{x})$ is close to $Q(\bar{x})$ in the
+\href{https://en.wikipedia.org/wiki/L%C3%A9vy%E2%80%93Prokhorov_metric}{Prokhorov metric}.
+One easy mistake is to claim that $P^*$ is always close to some sparse
+tuple mixture model as this family is dense in the space of
+probabilities. There are two problems with this claim. Firstly, this family is
+only dense in $\bar{\Omega}$, not in $\Omega$. Secondly, in current
+practice, we only consider sparse tuple mixture model with only finite
+number of components, which is not a dense set even in
+$\bar{\Omega}$. Therefore, we do not always expect our model to be
+able to capture the true model $P^*$.
+
+\subsection{Inference related quantities}
+
+The optimization objective is always easy to estimate. It is simply
+$$
+\sum_{\bar{x}}Q(\bar{x})\log\bar{P}(\bar{x}),
+$$
+which does not rely on the fixed point condition above and can be
+evaluated for any $\bar{P}$. It is a useful metric to monitor the
+progress of the optimization. When the true model $P^*$ is known, we
+can plug it in and get an upperbound of the objective. However, when
+the true model $P^*$ is not known, it would be interesting to know
+how the upperbound could be approximated.
+
+For single dimension, it is not hard to see that
+\begin{align*}
+  H(\bar{X}_i) = H(\Phi_i) + P(\Phi_i = 0)H(X_i).
+\end{align*}
+
+Below we briefly discuss the estimation of some high dimensional
+quantities. It is still unclear how useful these quantities are.
+\begin{enumerate}
+\item $H_{P^*}(\bar{X}_S)$ could be estimated using all samples.
+\item $H_{P^*}(X_S|\phi_S = 0)$ could be estimated using the samples where
+  no data is missing.
+\item $H_{P^*}(X_S)$ is not observable in general. It is only
+  observable for models where $\bar{P}^*$ can uniquely identify $P^*$,
+  such as the model in which $X$ and $\Phi$ are independent or
+  independent given some latent variable (e.g., sparse tuple mixture
+  model). When $P^*$ is a sparse
+  tuple mixture model, we can first learn a model $P$ from the instances
+  and then estimate $H_{P^*}(X_S)$ by $E_Q[-\log P(X_S)]$. The estimation is
+  good when $P$ is close to $P^*$.
+\item $H_P(\bar{X}_S)$, $H_P(X_S|\Phi_S = 0)$ and $H_P(X_S)$ are
+  possible to estimate given $P$, though the mixture model is usually not
+  tractable and there is issue about high
+  dimensional computation.
+\item $E_{P^*}[f(P(X))]$ can be approximated by $E_Q[f(P(X))]$. The optimization
+  objective is one such example.
+\end{enumerate}
+
+\pagebreak
+
+
+\section{Contextual multi-arm bandit}
+
+\href{https://arxiv.org/pdf/1508.03326v2.pdf}{This} is a useful survey
+about this topic. Section 4.1.4 is relevant to what we do.
+
+The main question is, does soft split make sense? As the policy
+$p(a|x)$ is not determined by the environment, the hard split conditional distribution
+$p(x, r|a) = p(x|a)p(r|x, a)$ is not fully determined by the
+environment. How do we handle this?
+
+One possibility is to build two
+layers of mixtures, first on $x$, then on $a$, thus the first layer is
+about $p(x)$ and the second layer is about $p(r|x, a)$. Is this the
+right way to do it? One question to ask here is that, how should we
+cluster $x$? We could cluster $x$ by itself, but we could also cluster
+$x$ with respect to $a$ and $r$. How to do this in a more principled way?
+
+
+\section{Lift tree}
+Lift tree is closely related to the decision tree, which is a diverge
+from our core algorithm based on mixture model. Both
+algorithms construct a tree by first picking a set of variables
+according to some optimization criterion and then
+generating new tree nodes for different configurations of these
+variables. Here is the algorithm for lift tree.
+\begin{enumerate}
+\item Specify the candidate sets of variables. In our case, due to
+  computational and sample constraint, we only consider sets of at
+  most two variable.
+\item Find the set of variables that gives the maximum average
+  lift. Stop if none of the sets has lift or the total number of
+  contexts is small.
+\item Generate a new tree node for each configuration with lift above
+  some threshold and
+  generate an ``else'' node for the other configurations. There are
+  several ways to pick the threshold. One could use the average lift
+  as the threshold or just use a constant as a threshold. Also we
+  should take the number of contexts into account. If some
+  configuration only has a small number of contexts, we will put it in
+  the ``else'' node.
+\end{enumerate}
+If the problem is optimizable, i.e., the context variables and action
+variable are relevant to the reward variable, and the default decision
+is not always the best one, then there exists a set of
+relevant variables with certain configuration such that some
+non-default decision has lift. The important thing to notice is that
+lifts are defined for configurations but not the set of
+variables themselves. Ideally we should just have a lift table for all
+possible configurations. Due to the choice that we only consider
+short configurations, we need to look for configurations in a cascading way
+to find a long configuration with lift. It is not clear if this choice
+is necessary.
+
+This algorithm makes another choice by restricting all children of a
+node to have the same set of variable. Ideally we could consider
+arbitrary short configurations as children, but this choice might have
+some computational benefit. One issue with this choice is not all
+configurations for this set of variables have good lift. It could
+happen that some configuration corresponding to another set of
+variables is able to optimize. The node ``else'' allows the algorithm
+to continue exploring the other variables, though it is no longer
+possible to consider the configurations involving both current and
+other variables.
+
+\begin{remark}
+In simplest decision tree, each tree node only represents a single
+variable. Here we consider one or two variables as tree node, which is
+more general. With the requirement on the number of contexts, we could
+consider arbitrary number of variables.
+\end{remark}
+\begin{remark}
+Decision tree could also incorporate the node ``else''. If some
+configurations are irrelevant and do not help reduce the entropy, then
+the tree should not split there and pool the samples for some later
+split.
+\end{remark}
+
+
+\section{Reinforcement Learning}
+
+This is too detailed.
+
+
+\section{CK12}
+
+\bibliographystyle{IEEEtran}
+\bibliography{big}
+
+\end{document}
